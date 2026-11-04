@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Rotate JWT_SECRET and the Postgres password for user `ladvien` in one shot:
 #   1. Generate new values.
-#   2. Push them to Bitwarden (items healthsync/jwt and healthsync/db).
+#   2. Push them to Bitwarden (items self-sensored/jwt and self-sensored/db).
 #   3. ALTER USER on host `four` over SSH.
 #   4. Verify the new DB password by connecting with psql.
 #   5. Rewrite api/.env via render-env.sh.
 #   6. Restart the API container if docker compose is running it.
 #
-# Does NOT rotate healthsync/ollama — that key comes from the Ollama dashboard
+# Does NOT rotate self-sensored/ollama — that key comes from the Ollama dashboard
 # and is edited in the vault manually.
 
 set -euo pipefail
@@ -28,7 +28,7 @@ status="$(bw status | sed -n 's/.*"status":"\([^"]*\)".*/\1/p')"
 
 SSH_HOST="${SSH_HOST:-four}"
 DB_HOST="${DB_HOST:-192.168.1.104}"
-DB_NAME="${DB_NAME:-apple_health_source}"
+DB_NAME="${DB_NAME:-self_sensored}"
 DB_USER="${DB_USER:-ladvien}"
 
 echo "==> Generating new secrets"
@@ -37,7 +37,7 @@ NEW_DB="$(openssl rand -base64 24 | tr -d '\n')"
 [[ ${#NEW_JWT} -ge 32 ]] || die "generated JWT too short (${#NEW_JWT} < 32)"
 
 # Back up the current DB password from the vault so we can roll back if ALTER USER fails.
-OLD_DB="$(bw get password healthsync/db 2>/dev/null || true)"
+OLD_DB="$(bw get password self-sensored/db 2>/dev/null || true)"
 
 update_item() {
     local name="$1" new_password="$2"
@@ -49,19 +49,19 @@ update_item() {
     printf '%s' "$updated" | bw encode | bw edit item "$id" >/dev/null
 }
 
-echo "==> Updating Bitwarden: healthsync/jwt"
-update_item healthsync/jwt "$NEW_JWT"
+echo "==> Updating Bitwarden: self-sensored/jwt"
+update_item self-sensored/jwt "$NEW_JWT"
 
-echo "==> Updating Bitwarden: healthsync/db"
-update_item healthsync/db "$NEW_DB"
+echo "==> Updating Bitwarden: self-sensored/db"
+update_item self-sensored/db "$NEW_DB"
 
 bw sync >/dev/null
 echo "    vault synced"
 
 rollback_vault() {
-    echo "==> Rolling back Bitwarden healthsync/db to previous password" >&2
+    echo "==> Rolling back Bitwarden self-sensored/db to previous password" >&2
     if [[ -n "$OLD_DB" ]]; then
-        update_item healthsync/db "$OLD_DB" || true
+        update_item self-sensored/db "$OLD_DB" || true
         bw sync >/dev/null || true
     else
         echo "    (no previous password captured — vault left at new value)" >&2

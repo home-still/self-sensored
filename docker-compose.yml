@@ -12,11 +12,11 @@ services:
           memory: 512M
 
   mcp:
-    image: apple_health_source_api
+    image: self-sensored-api
     pull_policy: never
     depends_on:
       - api
-    command: ["healthsync-mcp"]
+    command: ["self-sensored-mcp"]
     ports:
       - "0.0.0.0:7446:7446"
     env_file:

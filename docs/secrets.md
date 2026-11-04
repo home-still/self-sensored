@@ -20,9 +20,9 @@ not a folder):
 
 | Vault item         | Holds                                           | Rotation                         |
 | ------------------ | ----------------------------------------------- | -------------------------------- |
-| `healthsync/jwt`   | `JWT_SECRET` (HS256 signing key, ≥32 bytes)     | Auto — `rotate-secrets.sh`       |
-| `healthsync/db`    | Postgres password for user `ladvien` on `four`  | Auto — `rotate-secrets.sh`       |
-| `healthsync/ollama`| `OLLAMA_API_KEY` from ollama.com                | Manual — edit in the vault UI    |
+| `self-sensored/jwt`   | `JWT_SECRET` (HS256 signing key, ≥32 bytes)     | Auto — `rotate-secrets.sh`       |
+| `self-sensored/db`    | Postgres password for role `self_sensored` on `four`  | Auto — `rotate-secrets.sh`       |
+| `self-sensored/ollama`| `OLLAMA_API_KEY` from ollama.com                | Manual — edit in the vault UI    |
 
 Everything else in `api/.env` (DB host, DB name, DB user, URLs, log level,
 ports) is hardcoded in `scripts/render-env.sh`. If you need to change one of
@@ -67,8 +67,8 @@ first dev on a brand-new deployment):
 1. Open <https://vault.bitwarden.com> and sign in.
 2. For each row in the [Source of truth](#source-of-truth) table, click
    **Add item → Login** and create it with the exact name shown. For
-   `healthsync/jwt` and `healthsync/db`, the password can be any placeholder
-   — the first rotation overwrites them. For `healthsync/ollama`, paste the
+   `self-sensored/jwt` and `self-sensored/db`, the password can be any placeholder
+   — the first rotation overwrites them. For `self-sensored/ollama`, paste the
    real API key from <https://ollama.com/settings/keys>.
 3. Save each item.
 
@@ -89,11 +89,11 @@ Verify:
 
 ```bash
 bw status | jq -r .status      # prints: unlocked
-bw list items --search healthsync | jq -r '.[].name' | sort
+bw list items --search self-sensored | jq -r '.[].name' | sort
 # expected:
-#   healthsync/db
-#   healthsync/jwt
-#   healthsync/ollama
+#   self-sensored/db
+#   self-sensored/jwt
+#   self-sensored/ollama
 ```
 
 ### 5. Render `api/.env`
@@ -124,8 +124,8 @@ curl -fsS http://localhost:3000/health && echo OK
 Expected logs:
 
 ```
-apple_health_api: connected to database
-apple_health_api: listening on 0.0.0.0:3000
+self_sensored_api: connected to database
+self_sensored_api: listening on 0.0.0.0:3000
 ```
 
 If `/health` returns `OK`, you're set.
@@ -142,13 +142,13 @@ The rotation script does the whole flow in one shot. It:
 
 1. Generates a new JWT secret (48 bytes base64) and a new Postgres password
    (24 bytes base64).
-2. Writes both to Bitwarden (`healthsync/jwt` and `healthsync/db`).
+2. Writes both to Bitwarden (`self-sensored/jwt` and `self-sensored/db`).
 3. SSHes to `four` and runs `ALTER USER ladvien WITH PASSWORD ...`.
 4. Verifies the new DB password with `psql`.
 5. Re-renders `api/.env` via `render-env.sh`.
 6. Restarts the running `docker compose` API container if one is up.
 
-Rotation never touches `healthsync/ollama`.
+Rotation never touches `self-sensored/ollama`.
 
 ### Prerequisites
 
@@ -168,8 +168,8 @@ Expected output:
 
 ```
 ==> Generating new secrets
-==> Updating Bitwarden: healthsync/jwt
-==> Updating Bitwarden: healthsync/db
+==> Updating Bitwarden: self-sensored/jwt
+==> Updating Bitwarden: self-sensored/db
     vault synced
 ==> ALTER USER on four
 ALTER ROLE
@@ -199,7 +199,7 @@ error), the script **rolls the vault back** to the previous DB password so
 the vault and the DB stay in sync. The rotation aborts and your existing
 `api/.env` is untouched.
 
-`healthsync/ollama` is never written by the script, so Ollama access is
+`self-sensored/ollama` is never written by the script, so Ollama access is
 unaffected by a failed rotation.
 
 ---
@@ -210,7 +210,7 @@ This is a manual path because the key comes from Ollama's dashboard, not from
 `openssl rand`.
 
 1. Generate a new key at <https://ollama.com/settings/keys>.
-2. In the Bitwarden web vault, open `healthsync/ollama` and paste the new
+2. In the Bitwarden web vault, open `self-sensored/ollama` and paste the new
    value into the **Password** field. Save.
 3. Locally:
 
@@ -242,7 +242,7 @@ No secrets are generated or mutated. `api/.env` lands with mode 600.
 | --- | --- | --- |
 | `BW_SESSION not set` | Vault not unlocked in this shell | `export BW_SESSION="$(bw unlock --raw)"` |
 | `Bitwarden vault is locked` | Session timed out | Same as above |
-| `vault item 'healthsync/xxx' not found` | Item name typo, or item lives in a collection you lack access to | Verify with `bw list items --search healthsync` — names must match exactly |
+| `vault item 'self-sensored/xxx' not found` | Item name typo, or item lives in a collection you lack access to | Verify with `bw list items --search self-sensored` — names must match exactly |
 | `JWT_SECRET must be at least 32 bytes` on API boot | Placeholder in vault is too short | Run `scripts/rotate-secrets.sh` to replace it with a 48-byte value |
 | `psql: password authentication failed` during rotation | Vault and DB are out of sync (a previous rotation was interrupted) | See [Recovering from desync](#recovering-from-desync) |
 | `ALTER USER failed` | Can't SSH to `four`, or `sudo -u postgres` isn't allowed noninteractively | Fix SSH/sudo config on `four`; vault rolls back automatically |
@@ -263,7 +263,7 @@ and force the other to match:
   set a new one and write it to the vault.
 - **Vault is correct, DB is wrong** — SSH to `four` and manually run
   ```bash
-  NEW_DB=$(bw get password healthsync/db)
+  NEW_DB=$(bw get password self-sensored/db)
   ssh four "sudo -u postgres psql -c \"ALTER USER ladvien WITH PASSWORD '\$NEW_DB';\""
   ```
   Then re-render: `scripts/render-env.sh`.

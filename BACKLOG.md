@@ -6,7 +6,7 @@ Plan: `~/.claude/plans/sleepy-enchanting-cat.md`
 Decisions locked in v1:
 - **LLM:** Ollama Cloud (OpenAI-compatible at `https://ollama.com/v1`, key `OLLAMA_API_KEY`, model `gpt-oss:120b-cloud` by default).
 - **Nutrition:** USDA SR Legacy + Foundation Foods only (Branded / Iodine deferred).
-- **Sync dedup:** every written food correlation tagged `HKMetadataKeySyncIdentifier = "healthsync-meal-<uuid>"`.
+- **Sync dedup:** every written food correlation tagged `HKMetadataKeySyncIdentifier = "selfsensored-meal-<uuid>"`.
 
 ---
 
@@ -39,22 +39,22 @@ Decisions locked in v1:
 
 ## M5 — iOS SpeechService
 - [ ] `ios/project.yml`: `NSMicrophoneUsageDescription`, `NSSpeechRecognitionUsageDescription`
-- [ ] `ios/HealthSync/Speech/SpeechService.swift` (actor, on-device recognition)
-- [ ] `ios/HealthSync/Speech/FoodLanguageModel.swift` (stub)
+- [ ] `ios/SelfSensored/Speech/SpeechService.swift` (actor, on-device recognition)
+- [ ] `ios/SelfSensored/Speech/FoodLanguageModel.swift` (stub)
 
 ## M6 — iOS HealthKit write path
-- [ ] `ios/HealthSync/HealthKit/HKTypes.swift`: `allWriteTypes`
-- [ ] `ios/HealthSync/HealthKit/HKManager.swift`: auth + `writeMealCorrelation`
-- [ ] `ios/HealthSync/Models/MealNutrition.swift`
+- [ ] `ios/SelfSensored/HealthKit/HKTypes.swift`: `allWriteTypes`
+- [ ] `ios/SelfSensored/HealthKit/HKManager.swift`: auth + `writeMealCorrelation`
+- [ ] `ios/SelfSensored/Models/MealNutrition.swift`
 
 ## M7 — MealLogView UI
-- [ ] `ios/HealthSync/Sync/APIClient.swift`: `parseMeal`
-- [ ] `ios/HealthSync/Views/MealLogView.swift`
-- [ ] `ios/HealthSync/Views/DashboardView.swift`: nav entry
+- [ ] `ios/SelfSensored/Sync/APIClient.swift`: `parseMeal`
+- [ ] `ios/SelfSensored/Views/MealLogView.swift`
+- [ ] `ios/SelfSensored/Views/SyncView.swift`: nav entry
 
 ## M8 — Read-sync dedup
-- [ ] `ios/HealthSync/Sync/SyncEngine.swift`: `isAppWritten` filter
-- [ ] `ios/HealthSyncTests/HealthSyncTests.swift`: unit test
+- [ ] `ios/SelfSensored/Sync/SyncEngine.swift`: `isAppWritten` filter
+- [ ] `ios/SelfSensoredTests/SelfSensoredTests.swift`: unit test
 
 ## M9 — Deferred
 - [x] `SFCustomLanguageModelData` food vocabulary — 130-phrase corpus, cached compile (7c1242f)

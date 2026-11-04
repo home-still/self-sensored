@@ -7,7 +7,7 @@ Apple Health Source extracts HealthKit data from an iPhone, syncs it over HTTPS 
 ```
 ┌──────────────────┐        HTTPS         ┌─────────────────────┐        HTTP         ┌──────────────────┐
 │  iPhone / Watch  │ ──────────────────► │  two (.102)          │ ──────────────────► │  one (.101)      │
-│  HealthSync App  │  Cloudflare domain  │  Cloudflare Tunnel   │  LAN reverse proxy  │  Docker: Rust    │
+│  Self Sensored App  │  Cloudflare domain  │  Cloudflare Tunnel   │  LAN reverse proxy  │  Docker: Rust    │
 │  Swift 6 / HK   │ ◄────────────────── │  + nginx             │ ◄────────────────── │  Axum API :3000  │
 └──────────────────┘                     └─────────────────────┘                     └────────┬─────────┘
                                                                                               │ TCP 5432
@@ -560,7 +560,7 @@ Postgres already configured to accept LAN connections. Needs:
 
 ```
 # pg_hba.conf — allow API on one
-host apple_health_source ladvien 192.168.1.101/32 scram-sha-256
+host self_sensored self_sensored 192.168.1.101/32 scram-sha-256
 ```
 
 ---

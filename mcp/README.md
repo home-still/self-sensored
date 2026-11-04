@@ -51,7 +51,7 @@ $EDITOR mcp/.env   # fill DATABASE_URL (read-only role) and MCP_USER_ID
 ## Create the read-only DB role
 
 The exact SQL is in `mcp/.env.example`. Run it once as a superuser on
-`192.168.1.104` against the `healthsync` database.
+`192.168.1.104` against the `self_sensored` database.
 
 ## Wire up Claude Desktop
 
@@ -60,10 +60,10 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "healthsync": {
-      "command": "/Users/ladvien/apple_health_source/target/release/self-sensored-mcp",
+    "self-sensored": {
+      "command": "/Users/ladvien/self-sensored/target/release/self-sensored-mcp",
       "env": {
-        "DATABASE_URL": "postgres://self_sensored_mcp:...@192.168.1.104:5432/healthsync",
+        "DATABASE_URL": "postgres://self_sensored_mcp:...@192.168.1.104:5432/self_sensored",
         "MCP_USER_ID": "<user uuid>",
         "RUST_LOG": "self_sensored_mcp=info,rmcp=warn"
       }
@@ -72,7 +72,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-Restart Claude Desktop. You should see `healthsync` in the MCP picker.
+Restart Claude Desktop. You should see `self-sensored` in the MCP picker.
 
 ## Smoke tests
 
@@ -81,7 +81,7 @@ Restart Claude Desktop. You should see `healthsync` in the MCP picker.
 cargo test -p self-sensored-mcp
 
 # Manual stdio test with the MCP inspector
-npx @modelcontextprotocol/inspector /Users/ladvien/apple_health_source/target/release/self-sensored-mcp
+npx @modelcontextprotocol/inspector /Users/ladvien/self-sensored/target/release/self-sensored-mcp
 ```
 
 Try in the inspector:

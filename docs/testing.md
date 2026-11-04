@@ -12,7 +12,7 @@
 
 ```bash
 docker compose -f docker-compose.test.yml up -d
-DATABASE_URL=postgres://postgres:postgres@localhost:5433/apple_health_source \
+DATABASE_URL=postgres://postgres:postgres@localhost:5433/self_sensored \
     cargo test --workspace
 docker compose -f docker-compose.test.yml down
 ```
@@ -24,7 +24,7 @@ on `:5432`.
 The first time you start the container, run once:
 
 ```bash
-PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d apple_health_source \
+PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d self_sensored \
     -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
 ```
 

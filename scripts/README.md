@@ -13,9 +13,9 @@ personal Bitwarden vault under three items:
 
 | Vault item         | Holds                                       |
 | ------------------ | ------------------------------------------- |
-| `healthsync/jwt`   | `JWT_SECRET` (auto-rotated)                 |
-| `healthsync/db`    | Postgres password for user `ladvien` (auto) |
-| `healthsync/ollama`| `OLLAMA_API_KEY` (set once, never rotated)  |
+| `self-sensored/jwt`   | `JWT_SECRET` (auto-rotated)                 |
+| `self-sensored/db`    | Postgres password for role `self_sensored` (auto) |
+| `self-sensored/ollama`| `OLLAMA_API_KEY` (set once, never rotated)  |
 
 Everything else in `api/.env` (DB host, DB name, URLs, log level, port) is
 hardcoded in `scripts/render-env.sh`. To change one of those, edit the script.
@@ -29,9 +29,9 @@ bw login                                    # browser/email flow
 
 In the Bitwarden web vault (or `bw create item`), add three Login items with
 **exactly** those names. The `/` in the name is literal, not a folder — it's
-part of the item title. Put placeholder passwords in `healthsync/jwt` and
-`healthsync/db` (they'll be overwritten on first rotation). Put your real
-Ollama API key in `healthsync/ollama`.
+part of the item title. Put placeholder passwords in `self-sensored/jwt` and
+`self-sensored/db` (they'll be overwritten on first rotation). Put your real
+Ollama API key in `self-sensored/ollama`.
 
 ## Daily use: unlock the vault once per terminal
 
@@ -69,7 +69,7 @@ generated or mutated.
 
 ## Change the Ollama key
 
-Edit the password field of `healthsync/ollama` in the vault UI, then:
+Edit the password field of `self-sensored/ollama` in the vault UI, then:
 
 ```bash
 bw sync
@@ -82,9 +82,9 @@ docker compose up -d --force-recreate api   # if running
 - **`BW_SESSION not set`** — you haven't unlocked the vault in this shell.
   Run the `export BW_SESSION=...` line above.
 - **`Bitwarden vault is locked`** — session timed out. Unlock again.
-- **`vault item 'healthsync/xxx' not found`** — the item name is wrong or the
+- **`vault item 'self-sensored/xxx' not found`** — the item name is wrong or the
   item is in a collection you don't have access to. Double-check the name is
-  literally `healthsync/jwt` etc.
+  literally `self-sensored/jwt` etc.
 - **`ALTER USER failed`** — can't SSH to `four` or `sudo -u postgres` is not
   permitted for user `ladvien` on that host. Fix the SSH/sudo config and
   rerun; the vault will be rolled back automatically.

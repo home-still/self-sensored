@@ -1,7 +1,7 @@
 services:
   postgres:
     image: timescale/timescaledb:latest-pg17
-    container_name: healthsync_test_pg
+    container_name: self_sensored_test_pg
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

@@ -192,10 +192,10 @@ printf '```json\n'
 cat <<'EOF'
 {
   "mcpServers": {
-    "healthsync": {
-      "command": "/Users/ladvien/apple_health_source/target/release/self-sensored-mcp",
+    "self-sensored": {
+      "command": "/Users/ladvien/self-sensored/target/release/self-sensored-mcp",
       "env": {
-        "DATABASE_URL": "postgres://self_sensored_mcp:...@192.168.1.104:5432/healthsync",
+        "DATABASE_URL": "postgres://self_sensored_mcp:...@192.168.1.104:5432/self_sensored",
         "MCP_USER_ID": "<user uuid>",
         "RUST_LOG": "self_sensored_mcp=info,rmcp=warn"
       }

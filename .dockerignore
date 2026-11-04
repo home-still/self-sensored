@@ -1,0 +1,10 @@
+target/
+.git/
+ios/
+slop/
+.serena/
+.vscode/
+.claude/
+*.md
+LICENSE
+review_notes.md

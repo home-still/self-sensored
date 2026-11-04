@@ -1,13 +1,21 @@
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use serde_json::json;
+use thiserror::Error;
 
-#[derive(Debug)]
+/// Every fallible handler path returns `AppError`. The `#[source]` attribute
+/// on `Database` lets `error.source()` walk into the underlying sqlx chain,
+/// which the tracing subscriber serializes for structured logs.
+#[derive(Debug, Error)]
 pub enum AppError {
-    Database(sqlx::Error),
+    #[error("database error")]
+    Database(#[source] sqlx::Error),
+    #[error("auth error: {0}")]
     Auth(String),
+    #[error("bad request: {0}")]
     BadRequest(String),
+    #[error("internal error: {0}")]
     Internal(String),
 }
 
@@ -15,7 +23,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
             AppError::Database(ref e) => {
-                tracing::error!("Database error: {e:?}");
+                tracing::error!(error = ?e, "Database error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
             }
             AppError::Auth(ref msg) => {
@@ -41,7 +49,15 @@ impl From<sqlx::Error> for AppError {
 }
 
 impl From<jsonwebtoken::errors::Error> for AppError {
-    fn from(e: jsonwebtoken::errors::Error) -> Self {
-        AppError::Auth(e.to_string())
+    fn from(_e: jsonwebtoken::errors::Error) -> Self {
+        // Collapse all jsonwebtoken variants into a single opaque error so that
+        // clients cannot distinguish "expired" from "tampered" from "malformed".
+        AppError::Auth("invalid token".into())
+    }
+}
+
+impl From<validator::ValidationErrors> for AppError {
+    fn from(e: validator::ValidationErrors) -> Self {
+        AppError::BadRequest(format!("validation failed: {e}"))
     }
 }

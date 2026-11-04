@@ -1,3 +1,4 @@
+pub mod mock;
 pub mod ollama;
 pub mod prompt;
 

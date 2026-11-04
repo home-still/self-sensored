@@ -10,3 +10,22 @@ services:
       resources:
         limits:
           memory: 512M
+
+  mcp:
+    image: apple_health_source_api
+    pull_policy: never
+    depends_on:
+      - api
+    command: ["healthsync-mcp"]
+    ports:
+      - "0.0.0.0:7446:7446"
+    env_file:
+      - mcp/.env
+    environment:
+      MCP_TRANSPORT: http
+      MCP_HTTP_BIND: "0.0.0.0:7446"
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M

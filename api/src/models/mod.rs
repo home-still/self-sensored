@@ -3,8 +3,7 @@ pub mod meal;
 pub mod user;
 
 pub use health_sample::{
-    ActivitySummary, AuthResponse, DeleteRequest, DeviceRegistration, DeviceResponse,
-    HashCheckItem, HashCheckRequest, HashCheckResponse, HealthSample, Location, RoutePoint,
-    SyncPayload, SyncResponse, UserCharacteristics, Workout, WorkoutRoutePayload,
+    DeleteRequest, DeviceRegistration, DeviceResponse, HashCheckRequest, HashCheckResponse,
+    SyncPayload, SyncResponse, WorkoutRoutePayload,
 };
 pub use user::{CreateUser, LoginRequest, User};

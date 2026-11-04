@@ -1,0 +1,30 @@
+[advisories]
+yanked = "deny"
+# unmaintained = "warn" by default; keep it lenient for now
+
+[bans]
+# Duplicate majors are tracked but not hard-failed yet — Phase 2.8 left 17
+# transitives that would need ecosystem bumps to dedupe. Revisit in Phase 4.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "Zlib",
+    "0BSD",
+    "MPL-2.0",
+]
+confidence-threshold = 0.8
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # TimescaleDB image — required because the health_samples migration
+        # calls create_hypertable. Vanilla postgres:17 would fail at migrate.
+        image: timescale/timescaledb:latest-pg17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: apple_health_source
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # sqlx::test creates its own per-test DBs, but it reads the superuser
+      # URL from here. `apple_health_source` is a throwaway database — every
+      # test runs against a fresh clone.
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/apple_health_source
+      # Required at config load even in tests so `Config::from_env` succeeds.
+      JWT_SECRET: ci-test-secret-at-least-32-chars-long
+      OLLAMA_API_KEY: ci-test-ollama-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: enable timescaledb extension
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d apple_health_source \
+            -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          log-level: warn
+          command: check
+      - name: cargo test
+        run: cargo test --workspace --all-targets
+
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install xcodegen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen
+      - name: Build and test
+        run: |
+          xcodebuild test \
+            -project ios/HealthSync.xcodeproj \
+            -scheme HealthSync \
+            -destination "platform=iOS Simulator,name=iPhone 16,OS=latest" \
+            CODE_SIGNING_ALLOWED=NO

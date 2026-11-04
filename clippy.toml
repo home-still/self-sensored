@@ -1,0 +1,2 @@
+# Per-rule overrides land here as they come up. `cargo clippy -- -D warnings`
+# is enforced via CI, not via config in this file.

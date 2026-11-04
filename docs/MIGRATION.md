@@ -3,10 +3,10 @@
 This repo (`home-still/apple_health_source`) is the canonical home for the
 Apple-Health personal-data stack:
 
-- **iOS app** — `ios/HealthSync/` (SwiftUI, HealthKit read/write, speech-to-meal).
+- **iOS app** — `ios/Self Sensored/` (SwiftUI, HealthKit read/write, speech-to-meal).
 - **REST API** — `api/` (Rust, axum, JWT, Ollama meal parsing, USDA nutrition).
 - **Database DDLs** — `api/migrations/` (Postgres 17 + TimescaleDB hypertables).
-- **MCP server** — `mcp/` (`healthsync-mcp`, read-only SQL tool for Claude Desktop).
+- **MCP server** — `mcp/` (`self-sensored-mcp`, read-only SQL tool for Claude Desktop).
 
 ## Archived predecessors
 

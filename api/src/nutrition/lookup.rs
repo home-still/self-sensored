@@ -26,15 +26,19 @@ pub async fn best_match_for_term(
     .fetch_optional(pool)
     .await?;
 
-    Ok(row.map(|(fdc_id, name, data_type)| MatchedFood { fdc_id, name, data_type }))
+    Ok(row.map(|(fdc_id, name, data_type)| MatchedFood {
+        fdc_id,
+        name,
+        data_type,
+    }))
 }
 
 /// Pull every mapped nutrient for a food as amounts per 100 g.
 pub async fn nutrients_per_100g(
     pool: &PgPool,
     fdc_id: i32,
-) -> Result<Vec<(String, String, f32, bool)>, AppError> {
-    let rows: Vec<(String, String, f32, bool)> = sqlx::query_as(
+) -> Result<Vec<(String, String, f64, bool)>, AppError> {
+    let rows: Vec<(String, String, f64, bool)> = sqlx::query_as(
         r#"
         SELECT m.hk_identifier, n.unit_name, fn.amount, m.sparse
         FROM nutrition.food_nutrients fn
@@ -50,7 +54,8 @@ pub async fn nutrients_per_100g(
 }
 
 pub async fn portions_for(pool: &PgPool, fdc_id: i32) -> Result<Vec<Portion>, AppError> {
-    let rows: Vec<(Option<f32>, Option<String>, Option<String>, f32)> = sqlx::query_as(
+    #[allow(clippy::type_complexity)] // sqlx row tuple
+    let rows: Vec<(Option<f64>, Option<String>, Option<String>, f64)> = sqlx::query_as(
         r#"
         SELECT amount, portion_description, modifier, gram_weight
         FROM nutrition.food_portions
@@ -62,24 +67,38 @@ pub async fn portions_for(pool: &PgPool, fdc_id: i32) -> Result<Vec<Portion>, Ap
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(amount, portion_description, modifier, gram_weight)| Portion {
-            amount,
-            portion_description,
-            modifier,
-            gram_weight,
-        })
+        .map(
+            |(amount, portion_description, modifier, gram_weight)| Portion {
+                amount,
+                portion_description,
+                modifier,
+                gram_weight,
+            },
+        )
         .collect())
 }
 
+/// Minimum full-text rank or trigram similarity for an iodine match. Tuned so
+/// nonsense queries ("cod salad", "foo bar") return `None` instead of
+/// inheriting the top-ranked row of a no-op query.
+const IODINE_TS_RANK_FLOOR: f32 = 0.05;
+const IODINE_SIMILARITY_FLOOR: f32 = 0.3;
+
 /// Fuzzy-match a food name against the supplemental iodine table. Returns
 /// mcg per 100 g when a match exists, otherwise `None`.
-pub async fn iodine_supplemental(pool: &PgPool, food_name: &str) -> Result<Option<f32>, AppError> {
-    let row: Option<(f32,)> = sqlx::query_as(
+pub async fn iodine_supplemental(pool: &PgPool, food_name: &str) -> Result<Option<f64>, AppError> {
+    let row: Option<(f64,)> = sqlx::query_as(
         r#"
         SELECT iodine_mcg_per_100g
         FROM nutrition.iodine_supplemental
-        WHERE search_vector @@ plainto_tsquery('english', $1)
-           OR name % $1
+        WHERE (
+            search_vector @@ plainto_tsquery('english', $1)
+            AND ts_rank(search_vector, plainto_tsquery('english', $1)) > $2
+        )
+        OR (
+            name % $1
+            AND similarity(name, $1) > $3
+        )
         ORDER BY
             ts_rank(search_vector, plainto_tsquery('english', $1)) DESC,
             similarity(name, $1) DESC
@@ -87,13 +106,18 @@ pub async fn iodine_supplemental(pool: &PgPool, food_name: &str) -> Result<Optio
         "#,
     )
     .bind(food_name)
+    .bind(IODINE_TS_RANK_FLOOR)
+    .bind(IODINE_SIMILARITY_FLOOR)
     .fetch_optional(pool)
     .await?;
     Ok(row.map(|(v,)| v))
 }
 
 /// Scale the per-100g amounts to the user's actual grams consumed.
-pub fn scale_nutrients(per_100g: Vec<(String, String, f32, bool)>, grams: f32) -> Vec<NutrientValue> {
+pub fn scale_nutrients(
+    per_100g: Vec<(String, String, f64, bool)>,
+    grams: f64,
+) -> Vec<NutrientValue> {
     let factor = grams / 100.0;
     per_100g
         .into_iter()

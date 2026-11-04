@@ -25,6 +25,15 @@ impl NutritionCache {
         }
     }
 
+    /// Drop every cached entry. Used by the USDA importer after `--reset` so
+    /// callers don't see stale `fdc_id` mappings for up to 24h.
+    #[allow(dead_code)] // called from the importer library in Phase 3.3
+    pub async fn invalidate_all(&self) {
+        self.inner.invalidate_all();
+        // moka queues invalidations; run pending tasks to finalize immediately.
+        self.inner.run_pending_tasks().await;
+    }
+
     /// Look up `term` through the cache. On miss, call `fetch` and memoize.
     pub async fn get_or_fetch<F, Fut>(
         &self,
@@ -37,8 +46,10 @@ impl NutritionCache {
     {
         let key = normalize(term);
         if let Some(hit) = self.inner.get(&key).await {
+            metrics::counter!("nutrition_cache_hits_total").increment(1);
             return Ok((*hit).clone());
         }
+        metrics::counter!("nutrition_cache_misses_total").increment(1);
         let fetched = fetch().await?;
         self.inner.insert(key, Arc::new(fetched.clone())).await;
         Ok(fetched)

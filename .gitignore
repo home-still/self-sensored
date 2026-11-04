@@ -63,7 +63,12 @@ fastlane/test_output
 
 # Rust
 target/
+.env
 api/.env
+mcp/.env
+
+# Generated review reports
+reports/
 
 # XcodeGen (generated, not committed)
 ios/*.xcodeproj/
@@ -73,3 +78,6 @@ ios/buildServer.json
 
 # macOS
 .DS_Store
+
+# xcodebuild output (regenerated; never commit)
+ios/build/

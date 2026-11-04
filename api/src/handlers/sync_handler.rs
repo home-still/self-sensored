@@ -1,6 +1,7 @@
 use axum::Json;
 use axum::extract::State;
 use chrono::{DateTime, Utc};
+use sqlx::PgPool;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -11,6 +12,60 @@ use crate::models::{
     DeleteRequest, HashCheckRequest, HashCheckResponse, SyncPayload, SyncResponse,
     WorkoutRoutePayload,
 };
+
+/// RAII guard that marks a `sync_sessions` row as `failed` if the handler
+/// returns before reaching the success path. Any `?` between session creation
+/// and `disarm()` will trip this on Drop, so a row can never be left
+/// `pending` by an unhandled error.
+struct SessionGuard {
+    pool: PgPool,
+    session_id: i64,
+    finalized: bool,
+}
+
+impl SessionGuard {
+    fn new(pool: &PgPool, session_id: i64) -> Self {
+        Self {
+            pool: pool.clone(),
+            session_id,
+            finalized: false,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.finalized = true;
+    }
+}
+
+impl Drop for SessionGuard {
+    fn drop(&mut self) {
+        if self.finalized {
+            return;
+        }
+        let pool = self.pool.clone();
+        let id = self.session_id;
+        // The handler is on the tokio runtime; spawn a detached UPDATE so
+        // failure-finalization happens even when we're unwinding from `?`.
+        // The `WHERE status='pending'` clause makes it a no-op if some
+        // other path already set a terminal state.
+        tokio::spawn(async move {
+            if let Err(e) = sqlx::query(
+                r#"UPDATE sync_sessions
+                      SET status = 'failed',
+                          error_message = COALESCE(error_message, 'handler_error_pre_commit'),
+                          completed_at = NOW()
+                    WHERE id = $1 AND status = 'pending'"#,
+            )
+            .bind(id)
+            .execute(&pool)
+            .await
+            {
+                tracing::warn!(error = ?e, session_id = id,
+                    "SessionGuard failed to finalize abandoned sync_session");
+            }
+        });
+    }
+}
 
 /// POST /api/v1/health/check
 pub async fn hash_check(
@@ -39,22 +94,21 @@ pub async fn hash_check(
 
     for chunk in all_uuids.chunks(2000) {
         let chunk_vec: Vec<&str> = chunk.to_vec();
-        // Filter by sample_type so the TimescaleDB bloom filter can prune
-        // chunks that don't contain this type. Without it, the planner walks
-        // every chunk in the hypertable (~30s+ on multi-million-row tables).
-        let rows: Vec<(String, Option<String>)> = sqlx::query_as(
+        // Sub-100ms PK probe against the manifest; the hypertable is no
+        // longer on the hot read path for the sync protocol. hk_uuid is
+        // globally unique so the sample_type filter is unnecessary.
+        let rows: Vec<(String, String)> = sqlx::query_as(
             r#"SELECT hk_uuid, content_hash
-               FROM health_samples
-               WHERE user_id = $1 AND sample_type = $2 AND hk_uuid = ANY($3)"#,
+               FROM health_sample_manifest
+               WHERE user_id = $1 AND hk_uuid = ANY($2)"#,
         )
         .bind(user_id)
-        .bind(&payload.sample_type)
         .bind(&chunk_vec)
         .fetch_all(&state.pool)
         .await?;
 
         for (uuid, hash) in rows {
-            existing_map.insert(uuid, hash);
+            existing_map.insert(uuid, Some(hash));
         }
     }
 
@@ -67,6 +121,25 @@ pub async fn hash_check(
         })
         .map(|item| item.hk_uuid.clone())
         .collect();
+
+    // Finalize the session here when no follow-up `/sync` is expected. If
+    // there's nothing for the client to send, this row should reach a
+    // terminal state immediately — otherwise the client correctly skips
+    // `/sync`, leaving the row stuck in `pending` forever (the bug that
+    // motivated this guard).
+    if needed_uuids.is_empty() {
+        sqlx::query(
+            r#"UPDATE sync_sessions
+                  SET status = 'completed',
+                      samples_sent = 0,
+                      samples_accepted = 0,
+                      completed_at = NOW()
+                WHERE id = $1"#,
+        )
+        .bind(session_id)
+        .execute(&state.pool)
+        .await?;
+    }
 
     Ok(Json(HashCheckResponse {
         needed_uuids,
@@ -98,9 +171,26 @@ pub async fn sync(
     .execute(&state.pool)
     .await?;
 
+    // Arm the failure-finalization guard. Any `?` between here and
+    // `guard.disarm()` (after the success commit below) marks the session
+    // 'failed' on Drop, so a row can never be left silently 'pending'.
+    let mut guard = SessionGuard::new(&state.pool, payload.session_id);
+
     let mut tx = state.pool.begin().await?;
     let samples_synced = payload.samples.len();
     let workouts_synced = payload.workouts.len();
+
+    // Record device liveness on every successful sync. `register_device`
+    // only runs on first install, so without this `last_seen` would only
+    // ever reflect the install time, not actual data flow. Inside the same
+    // tx as the sample inserts so a rolled-back batch doesn't move it.
+    sqlx::query(
+        "UPDATE devices SET last_seen = NOW() WHERE id = $1 AND user_id = $2",
+    )
+    .bind(payload.device_id)
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await?;
 
     // Batch upsert health_samples using UNNEST
     if !payload.samples.is_empty() {
@@ -181,6 +271,28 @@ pub async fn sync(
         .bind(&p_correlation_ids)
         .bind(&p_metadatas)
         .bind(&p_session_ids)
+        .execute(&mut *tx)
+        .await?;
+
+        // Mirror into the /check sidecar. Reuses the already-built parallel
+        // vectors so this is zero extra allocations — just one round-trip to
+        // PG inside the same tx so the manifest can't drift from the
+        // hypertable under normal operation.
+        sqlx::query(
+            r#"INSERT INTO health_sample_manifest
+               (user_id, hk_uuid, sample_type, content_hash, updated_at)
+               SELECT * FROM UNNEST(
+                 $1::uuid[], $2::text[], $3::text[], $4::text[]
+               ), NOW()
+               ON CONFLICT (user_id, hk_uuid) DO UPDATE SET
+                 sample_type  = EXCLUDED.sample_type,
+                 content_hash = EXCLUDED.content_hash,
+                 updated_at   = NOW()"#,
+        )
+        .bind(&p_user_ids)
+        .bind(&p_hk_uuids)
+        .bind(&p_sample_types)
+        .bind(&p_content_hashes)
         .execute(&mut *tx)
         .await?;
     }
@@ -264,23 +376,13 @@ pub async fn sync(
         .await?;
     }
 
-    // Handle deletions — constrained by sample_type to leverage the
-    // (user_id, sample_type, start_date) index and avoid scanning
-    // compressed chunks for unrelated types.
-    let mut deleted = 0usize;
-    if !payload.deleted_uuids.is_empty() {
-        let result = sqlx::query(
-            "DELETE FROM health_samples WHERE user_id = $1 AND sample_type = $2 AND hk_uuid = ANY($3)",
-        )
-        .bind(user_id)
-        .bind(&payload.sample_type)
-        .bind(&payload.deleted_uuids)
-        .execute(&mut *tx)
-        .await?;
-        deleted = result.rows_affected() as usize;
-    }
-
-    // Update sync session
+    // Update sync session. Deletions are reported as *requested* — the
+    // actual DELETE runs after commit as a detached task (see below)
+    // because a hypertable DELETE without a `start_date` predicate
+    // scans every chunk and, with compression enabled, takes minutes.
+    // Keeping it inside this transaction was orphaning /sync requests
+    // at the iOS URLSession 120 s timeout.
+    let deletions_requested = payload.deleted_uuids.len();
     let latitude = payload.location.as_ref().map(|l| l.latitude);
     let longitude = payload.location.as_ref().map(|l| l.longitude);
 
@@ -292,18 +394,55 @@ pub async fn sync(
     )
     .bind(payload.session_id)
     .bind((samples_synced + workouts_synced) as i64)
-    .bind(deleted as i64)
+    .bind(deletions_requested as i64)
     .bind(latitude)
     .bind(longitude)
     .execute(&mut *tx)
     .await?;
 
     tx.commit().await?;
+    guard.disarm();
+
+    // Detached deletion. HealthKit keeps re-reporting deletions until the
+    // phone sees the sample gone from the server on next read, so losing a
+    // spawned task on restart is self-healing — next /sync re-sends the
+    // same `deleted_uuids`.
+    if !payload.deleted_uuids.is_empty() {
+        let pool = state.pool.clone();
+        let sample_type = payload.sample_type.clone();
+        let deleted_uuids = payload.deleted_uuids.clone();
+        tokio::spawn(async move {
+            let samples_result = sqlx::query(
+                "DELETE FROM health_samples WHERE user_id = $1 AND sample_type = $2 AND hk_uuid = ANY($3)",
+            )
+            .bind(user_id)
+            .bind(&sample_type)
+            .bind(&deleted_uuids)
+            .execute(&pool)
+            .await;
+            if let Err(e) = samples_result {
+                tracing::warn!(error = ?e, user_id = ?user_id, sample_type = %sample_type,
+                    "background DELETE on health_samples failed");
+                return;
+            }
+            if let Err(e) = sqlx::query(
+                "DELETE FROM health_sample_manifest WHERE user_id = $1 AND hk_uuid = ANY($2)",
+            )
+            .bind(user_id)
+            .bind(&deleted_uuids)
+            .execute(&pool)
+            .await
+            {
+                tracing::warn!(error = ?e, user_id = ?user_id,
+                    "background DELETE on health_sample_manifest failed");
+            }
+        });
+    }
 
     Ok(Json(SyncResponse {
         samples_synced,
         workouts_synced,
-        deleted,
+        deleted: deletions_requested,
     }))
 }
 
@@ -329,6 +468,14 @@ pub async fn delete(
             .execute(&mut *tx)
             .await?
             .rows_affected();
+
+    sqlx::query(
+        "DELETE FROM health_sample_manifest WHERE user_id = $1 AND hk_uuid = ANY($2)",
+    )
+    .bind(user_id)
+    .bind(&payload.hk_uuids)
+    .execute(&mut *tx)
+    .await?;
 
     let route_points = sqlx::query(
         "DELETE FROM workout_route_points WHERE user_id = $1 AND workout_hk_uuid = ANY($2)",

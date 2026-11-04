@@ -1,4 +1,4 @@
-name: HealthSync
+name: SelfSensored
 options:
   bundleIdPrefix: com.ladvien
   deploymentTarget:
@@ -6,14 +6,14 @@ options:
   generateEmptyDirectories: true
 
 targets:
-  HealthSync:
+  SelfSensored:
     type: application
     platform: iOS
     sources:
-      - path: HealthSync
+      - path: SelfSensored
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.ladvien.healthsync
+        PRODUCT_BUNDLE_IDENTIFIER: com.ladvien.selfsensored
         DEVELOPMENT_TEAM: KANRAMGCUY
         CODE_SIGN_STYLE: Automatic
         SWIFT_VERSION: "6.0"
@@ -29,63 +29,65 @@ targets:
         release:
           SWIFT_OPTIMIZATION_LEVEL: -O
     info:
-      path: HealthSync/Info.plist
+      path: SelfSensored/Info.plist
       properties:
-        CFBundleDisplayName: HealthSync
+        CFBundleDisplayName: Self Sensored
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSHealthShareUsageDescription: >-
-          HealthSync reads your health data to sync it to your personal dashboard.
+          Self Sensored reads your health data to sync it to your personal dashboard.
         NSHealthUpdateUsageDescription: >-
-          HealthSync writes the meals you voice-log back to Apple Health so all 38 nutrients live alongside your other health data.
+          Self Sensored writes the meals you voice-log back to Apple Health so all 38 nutrients live alongside your other health data.
         NSMicrophoneUsageDescription: >-
-          HealthSync uses the microphone so you can describe meals by voice.
+          Self Sensored uses the microphone so you can describe meals by voice.
         NSSpeechRecognitionUsageDescription: >-
-          HealthSync transcribes your meal descriptions on-device using Apple's Speech framework.
+          Self Sensored transcribes your meal descriptions on-device using Apple's Speech framework.
         NSLocationWhenInUseUsageDescription: >-
-          HealthSync records your location at sync time to associate health data with where you are.
+          Self Sensored records your location at sync time to associate health data with where you are.
         NSLocalNetworkUsageDescription: >-
-          HealthSync connects to your local API server to sync health data.
+          Self Sensored connects to your local API server to sync health data.
         NSBonjourServices:
           - _http._tcp
         NSAppTransportSecurity:
+          # NSAllowsLocalNetworking covers the only non-HTTPS case we care
+          # about (local dev server on the LAN). Dropping the blanket
+          # NSAllowsArbitraryLoads keeps ATS active for everything else.
           NSAllowsLocalNetworking: true
-          NSAllowsArbitraryLoads: true
         UIBackgroundModes:
           - fetch
     entitlements:
-      path: HealthSync/HealthSync.entitlements
+      path: SelfSensored/SelfSensored.entitlements
       properties:
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.background-delivery: true
 
-  HealthSyncTests:
+  SelfSensoredTests:
     type: bundle.unit-test
     platform: iOS
     sources:
-      - path: HealthSyncTests
+      - path: SelfSensoredTests
     dependencies:
-      - target: HealthSync
+      - target: SelfSensored
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.ladvien.healthsync.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.ladvien.selfsensored.tests
         GENERATE_INFOPLIST_FILE: YES
 
 schemes:
-  HealthSync:
+  SelfSensored:
     build:
       targets:
-        HealthSync: all
-        HealthSyncTests: [test]
+        SelfSensored: all
+        SelfSensoredTests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
-        - HealthSyncTests
+        - SelfSensoredTests
     profile:
       config: Release
     analyze:

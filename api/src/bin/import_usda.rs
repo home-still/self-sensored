@@ -1,4 +1,4 @@
-//! Thin CLI wrapper around `apple_health_api::importer::run`.
+//! Thin CLI wrapper around `self_sensored_api::importer::run`.
 //!
 //! Expected layout: `--dir <path>` pointing at an unzipped USDA CSV bundle
 //! (SR Legacy or Foundation Foods) containing `food.csv`, `nutrient.csv`,
@@ -12,7 +12,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use apple_health_api::importer;
+use self_sensored_api::importer;
 use clap::Parser;
 use sqlx::postgres::PgPoolOptions;
 

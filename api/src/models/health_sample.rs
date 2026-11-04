@@ -130,6 +130,8 @@ pub struct DeleteRequest {
 
 // ---------- activity summaries ----------
 
+// Populated from `activity_summaries` rows for future read endpoints.
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct ActivitySummary {
     pub date: NaiveDate,
@@ -148,6 +150,8 @@ pub struct ActivitySummary {
 
 // ---------- user characteristics ----------
 
+// Populated from `user_characteristics` rows for future read endpoints.
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct UserCharacteristics {
     pub user_id: Uuid,
